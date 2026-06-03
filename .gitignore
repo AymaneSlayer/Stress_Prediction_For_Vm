@@ -1,0 +1,5 @@
+*.csv
+*.pth
+*.png
+__pycache__/
+.streamlit/
