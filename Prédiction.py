@@ -5,6 +5,7 @@ from sklearn.preprocessing import MinMaxScaler
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Appareil utilise : {device}")
@@ -47,7 +48,7 @@ print(f"Train : {len(X_train)} | Test : {len(X_test)}")
 
 train_loader = DataLoader(TensorDataset(X_train, y_train), batch_size=32, shuffle=False)
 
-# 3. Modele LSTM (Mis a jour pour predire 2 variables sur 24 heures -> 48 sorties)
+#Modele LSTM 
 class LSTMModel(nn.Module):
     def __init__(self):
         super().__init__()
@@ -208,3 +209,24 @@ print(f"Pics detectes (RAM > {SEUIL_PIC}%) : {len(pics_ram)} heures")
 print(f"Creux detectes (RAM < {SEUIL_CREUX}%) : {len(creux_ram)} heures")
 mae_ram = np.mean(np.abs(predictions_ram - y_test_reel_ram))
 print(f"Erreur moyenne (MAE RAM) : {mae_ram:.2f}%")
+
+def calcul_metriques(y_reel, y_pred):
+    mae = mean_absolute_error(y_reel, y_pred)
+    rmse = np.sqrt(mean_squared_error(y_reel, y_pred))
+    y_reel_safe = np.where(y_reel == 0, 1e-5, y_reel)
+    mape = np.mean(np.abs((y_reel - y_pred) / y_reel_safe)) * 100
+    
+    r2 = r2_score(y_reel, y_pred)
+    return mae, rmse, mape, r2
+
+mae_cpu, rmse_cpu, mape_cpu, r2_cpu = calcul_metriques(y_test_reel_cpu, predictions_cpu)
+mae_ram, rmse_ram, mape_ram, r2_ram = calcul_metriques(y_test_reel_ram, predictions_ram)
+
+print("\n" + "="*20 + " RAPPORT DE PERFORMANCE GLOBAL " + "="*20)
+metrics_df = pd.DataFrame({
+    "Métrique": ["MAE (Erreur moy. %)", "RMSE (Pénalise gros écarts)", "MAPE (Erreur relative %)", "R² (Score d'ajustement)"],
+    "CPU": [f"{mae_cpu:.2f}%", f"{rmse_cpu:.2f}%", f"{mape_cpu:.2f}%", f"{r2_cpu:.4f}"],
+    "RAM": [f"{mae_ram:.2f}%", f"{rmse_ram:.2f}%", f"{mape_ram:.2f}%", f"{r2_ram:.4f}"]
+})
+print(metrics_df.to_string(index=False))
+print("="*71)
