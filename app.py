@@ -4,6 +4,7 @@ import torch.nn as nn
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import psycopg2
 from sklearn.preprocessing import MinMaxScaler
 
 # CONFIG PAGE
@@ -50,16 +51,28 @@ st.sidebar.markdown(f"""
 
 st.sidebar.markdown("<hr style='border-color:#333; margin-top:24px;'>", unsafe_allow_html=True)
 
-# CHARGEMENT DONNEES
 @st.cache_data
 def load_data():
-    df = pd.read_csv("Book1.csv")
+    conn = psycopg2.connect(
+        host="192.168.123.129",
+        database="vm_monitoring",
+        user="Admin",
+        password="ayay2844",
+        port="5432"
+    )
+    query = """
+        SELECT timestamp, cpu_percent, ram_percent,
+               heure, jour_semaine, est_weekend, vitesse_cpu
+        FROM vm_metrics 
+        ORDER BY timestamp
+    """
+    df = pd.read_sql(query, conn)
+    conn.close()
     df["timestamp"] = pd.to_datetime(df["timestamp"])
-    df = df.sort_values("timestamp")
     return df
 
 df = load_data()
-
+df["vitesse_cpu"] = df["vitesse_cpu"].fillna(0)
 scaler_cpu = MinMaxScaler()
 scaler_ram = MinMaxScaler()
 cpu_norm = scaler_cpu.fit_transform(df[["cpu_percent"]].values)
@@ -70,7 +83,15 @@ derniere_fenetre = data_normalise[-24:]
 timestamps_hist = df["timestamp"].iloc[-24:].values
 cpu_hist        = df["cpu_percent"].iloc[-24:].values
 ram_hist        = df["ram_percent"].iloc[-24:].values
+scaler_heure   = MinMaxScaler()
+scaler_jour    = MinMaxScaler()
+scaler_vitesse = MinMaxScaler()
+heure_norm   = scaler_heure.fit_transform(df[["heure"]].values)
+jour_norm    = scaler_jour.fit_transform(df[["jour_semaine"]].values)
+weekend_norm = df[["est_weekend"]].values
+vitesse_norm = scaler_vitesse.fit_transform(df[["vitesse_cpu"]].values)
 
+data_normalise = np.hstack([cpu_norm, ram_norm, heure_norm, jour_norm, weekend_norm, vitesse_norm])
 # HEADER
 st.markdown("<h1>Prediction des 24 prochaines heures</h1>", unsafe_allow_html=True)
 st.markdown("<hr>", unsafe_allow_html=True)
@@ -131,7 +152,6 @@ if st.button("Lancer la prediction"):
     moy_cpu = np.mean(predictions_cpu)
     moy_ram = np.mean(predictions_ram)
 
-    # Metriques
     st.markdown("<br>", unsafe_allow_html=True)
     col1, col2, col3, col4 = st.columns(4)
     with col1: st.metric("Pic CPU predit",      f"{max_cpu:.1f}%")
